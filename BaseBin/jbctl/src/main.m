@@ -5,6 +5,7 @@
 
 #import <Foundation/Foundation.h>
 #import <CoreServices/LSApplicationProxy.h>
+#include <uuid/uuid.h>
 
 int reboot3(uint64_t flags, ...);
 #define RB2_USERREBOOT (0x2000000000000000llu)
@@ -18,6 +19,9 @@ Available commands:\n\
 	trustcache info\t\t\tPrint info about all jailbreak related trustcaches and the cdhashes contained in them\n\
 	trustcache clear\t\tClears all existing cdhashes from the jailbreaks trustcache\n\
 	trustcache add /path/to/macho\t\tAdd the cdhash of a macho to the jailbreaks trustcache\n\
+	bootsessionuuid get\t\tPrint the current spoofed kern.bootsessionuuid\n\
+	bootsessionuuid set <uuid>\tReplace kern.bootsessionuuid without rejailbreaking\n\
+	bootsessionuuid random\t\tGenerate and install a new kern.bootsessionuuid\n\
 	update <tipa/basebin> <path>\tInitiates a jailbreak update either based on a TIPA or based on a basebin.tar file, TIPA installation depends on TrollStore, afterwards it triggers a userspace reboot\n");
 }
 
@@ -145,6 +149,52 @@ int main(int argc, char* argv[])
 	}
 	else if (!strcmp(cmd, "reboot_userspace")) {
 		return reboot3(RB2_USERREBOOT);
+	}
+	else if (!strcmp(cmd, "bootsessionuuid")) {
+		if (getuid() != 0) {
+			printf("ERROR: bootsessionuuid command requires root.\n");
+			return 3;
+		}
+		if (argc < 3) {
+			print_usage();
+			return 2;
+		}
+
+		const char *subcommand = argv[2];
+		if (!strcmp(subcommand, "get")) {
+			char *uuid = NULL;
+			int r = jbclient_root_bootsessionuuid_get(&uuid);
+			if (r == 0 && uuid) {
+				printf("%s\n", uuid);
+				free(uuid);
+			}
+			return r;
+		}
+
+		char generated[BOOTSESSIONUUID_STRING_SIZE] = {0};
+		const char *uuid = NULL;
+		if (!strcmp(subcommand, "set")) {
+			if (argc < 4) {
+				print_usage();
+				return 2;
+			}
+			uuid = argv[3];
+		}
+		else if (!strcmp(subcommand, "random")) {
+			uuid_t randomUUID;
+			uuid_generate_random(randomUUID);
+			uuid_unparse_upper(randomUUID, generated);
+			uuid = generated;
+		}
+		else {
+			print_usage();
+			return 2;
+		}
+
+		int r = jbclient_root_bootsessionuuid_set(uuid);
+		if (r == 0) printf("%s\n", uuid);
+		else printf("Failed to set kern.bootsessionuuid: %d\n", r);
+		return r;
 	}
 	else if (!strcmp(cmd, "update")) {
 		if (argc < 4) {

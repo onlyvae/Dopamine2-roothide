@@ -1,4 +1,5 @@
 #include "jbserver_global.h"
+#include <errno.h>
 #include <libjailbreak/jbserver_boomerang.h>
 #include <libjailbreak/trustcache.h>
 #include <libjailbreak/info.h>
@@ -100,6 +101,23 @@ static int root_trustcache_clear(void)
 	return 0;
 }
 
+static int root_bootsessionuuid_get(char **uuidOut)
+{
+	if (!uuidOut) return -1;
+
+	char uuid[BOOTSESSIONUUID_STRING_SIZE] = {0};
+	int r = bootsessionuuid_get(uuid);
+	if (r != 0) return r;
+
+	*uuidOut = strdup(uuid);
+	return *uuidOut ? 0 : ENOMEM;
+}
+
+static int root_bootsessionuuid_set(const char *uuid)
+{
+	return bootsessionuuid_set(uuid);
+}
+
 struct jbserver_domain gRootDomain = {
 	.permissionHandler = root_domain_allowed,
 	.actions = {
@@ -171,6 +189,22 @@ struct jbserver_domain gRootDomain = {
 		{
 			.handler = root_trustcache_clear,
 			.args = (jbserver_arg[]){
+				{ 0 },
+			},
+		},
+		// JBS_ROOT_BOOTSESSIONUUID_GET
+		{
+			.handler = root_bootsessionuuid_get,
+			.args = (jbserver_arg[]){
+				{ .name = "uuid", .type = JBS_TYPE_STRING, .out = true },
+				{ 0 },
+			},
+		},
+		// JBS_ROOT_BOOTSESSIONUUID_SET
+		{
+			.handler = root_bootsessionuuid_set,
+			.args = (jbserver_arg[]){
+				{ .name = "uuid", .type = JBS_TYPE_STRING, .out = false },
 				{ 0 },
 			},
 		},

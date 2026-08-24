@@ -65,6 +65,11 @@ bool otherJailbreakActived(bool postexploit);
 
 void hideDeveloperMode();
 
+#define BOOTSESSIONUUID_STRING_SIZE 37
+int bootsessionuuid_get(char uuidOut[BOOTSESSIONUUID_STRING_SIZE]);
+int bootsessionuuid_set(const char *uuid);
+int bootsessionuuid_randomize(char uuidOut[BOOTSESSIONUUID_STRING_SIZE]);
+
 void exec_set_patch(bool enabled);
 int exec_cmd_roothide_spawn(pid_t* pidp, const char* path, const posix_spawn_file_actions_t *fap, const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]);
 
@@ -90,4 +95,3 @@ bool is_apple_internal_identifier(const char* identifier);
     @"com.opa334.Dopamine.roothide",\
     @"com.opa334.Dopamine-roothide",\
 ]
-

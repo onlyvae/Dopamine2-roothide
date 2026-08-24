@@ -482,6 +482,38 @@ int jbclient_root_trustcache_clear(void)
 	return -1;
 }
 
+int jbclient_root_bootsessionuuid_get(char **uuidOut)
+{
+	if (!uuidOut) return -1;
+	*uuidOut = NULL;
+
+	xpc_object_t xreply = jbserver_xpc_send(JBS_DOMAIN_ROOT, JBS_ROOT_BOOTSESSIONUUID_GET, NULL);
+	if (xreply) {
+		int64_t result = xpc_dictionary_get_int64(xreply, "result");
+		const char *uuid = xpc_dictionary_get_string(xreply, "uuid");
+		if (result == 0 && uuid) *uuidOut = strdup(uuid);
+		xpc_release(xreply);
+		return result;
+	}
+	return -1;
+}
+
+int jbclient_root_bootsessionuuid_set(const char *uuid)
+{
+	if (!uuid) return -1;
+
+	xpc_object_t xargs = xpc_dictionary_create_empty();
+	xpc_dictionary_set_string(xargs, "uuid", uuid);
+	xpc_object_t xreply = jbserver_xpc_send(JBS_DOMAIN_ROOT, JBS_ROOT_BOOTSESSIONUUID_SET, xargs);
+	xpc_release(xargs);
+	if (xreply) {
+		int64_t result = xpc_dictionary_get_int64(xreply, "result");
+		xpc_release(xreply);
+		return result;
+	}
+	return -1;
+}
+
 int jbclient_boomerang_done(void)
 {
 	xpc_object_t xreply = jbserver_xpc_send(JBS_DOMAIN_ROOT, JBS_BOOMERANG_DONE, NULL);

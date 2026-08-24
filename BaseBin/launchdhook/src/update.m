@@ -151,6 +151,9 @@ sets[idx++] = "namecache";
 if (xpf_set_is_supported("amfi_oids")) {
 	sets[idx++] = "amfi_oids";
 }
+if (xpf_set_is_supported("sysctl_oids")) {
+	sets[idx++] = "sysctl_oids";
+}
 
 sets[idx] = NULL;
 /********************** roothide *************************/

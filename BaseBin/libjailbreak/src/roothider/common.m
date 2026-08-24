@@ -13,6 +13,7 @@
 #include <mach-o/dyld.h>
 #include <sys/proc_info.h>
 #include <dispatch/dispatch.h>
+#include <uuid/uuid.h>
 
 #include "../libjailbreak.h"
 #include "../codesign.h"
@@ -452,6 +453,98 @@ struct sysctl_oid {
 	int             oid_version;
 	int             oid_refcnt;
 };
+
+static int bootsessionuuid_get_oid(uint64_t *oidpOut, struct sysctl_oid *oidOut)
+{
+    uint64_t oidNameField = ksymbol(bootsessionuuid);
+    if (!oidNameField) return ENOENT;
+
+    uint64_t oidp = oidNameField - offsetof(struct sysctl_oid, oid_name);
+    struct sysctl_oid oid = {0};
+    if (kreadbuf(oidp, &oid, sizeof(oid)) != 0) return EIO;
+
+    char oidName[sizeof("bootsessionuuid")] = {0};
+    uint64_t oidNamePtr = UNSIGN_PTR((uint64_t)oid.oid_name);
+    if (!oidNamePtr ||
+        kreadbuf(oidNamePtr, oidName, sizeof(oidName)) != 0 ||
+        strcmp(oidName, "bootsessionuuid") != 0 ||
+        oid.oid_arg2 != BOOTSESSIONUUID_STRING_SIZE ||
+        !oid.oid_handler) {
+        return EPROTO;
+    }
+
+    if (oidpOut) *oidpOut = oidp;
+    if (oidOut) *oidOut = oid;
+    return 0;
+}
+
+int bootsessionuuid_get(char uuidOut[BOOTSESSIONUUID_STRING_SIZE])
+{
+    if (!uuidOut) return EINVAL;
+
+    struct sysctl_oid oid = {0};
+    int r = bootsessionuuid_get_oid(NULL, &oid);
+    if (r != 0) return r;
+
+    uint64_t valuePtr = UNSIGN_PTR((uint64_t)oid.oid_arg1);
+    if (!valuePtr || kreadbuf(valuePtr, uuidOut, BOOTSESSIONUUID_STRING_SIZE) != 0) {
+        return EIO;
+    }
+    uuidOut[BOOTSESSIONUUID_STRING_SIZE - 1] = '\0';
+
+    uuid_t parsed;
+    if (uuid_parse(uuidOut, parsed) != 0) return EPROTO;
+    return 0;
+}
+
+int bootsessionuuid_set(const char *uuid)
+{
+    if (!uuid) return EINVAL;
+
+    uuid_t parsed;
+    if (uuid_parse(uuid, parsed) != 0) return EINVAL;
+
+    char normalized[BOOTSESSIONUUID_STRING_SIZE] = {0};
+    uuid_unparse_upper(parsed, normalized);
+
+    uint64_t oidp = 0;
+    int r = bootsessionuuid_get_oid(&oidp, NULL);
+    if (r != 0) return r;
+
+    // Publish a fully initialized replacement with one aligned pointer write.
+    // Old buffers are intentionally retained because a concurrent sysctl may
+    // still hold the previous oid_arg1 pointer.
+    uint64_t replacementBuffer = 0;
+    if (kalloc(&replacementBuffer, 0x40) != 0 || !replacementBuffer) {
+        return ENOMEM;
+    }
+
+    if (kwritebuf(replacementBuffer, normalized, sizeof(normalized)) != 0) {
+        kfree(replacementBuffer, 0x40);
+        return EIO;
+    }
+
+    uint64_t arg1Field = oidp + offsetof(struct sysctl_oid, oid_arg1);
+    if (kwrite64(arg1Field, replacementBuffer) != 0) {
+        kfree(replacementBuffer, 0x40);
+        return EIO;
+    }
+
+    uint64_t installed = UNSIGN_PTR(kread64(arg1Field));
+    return installed == UNSIGN_PTR(replacementBuffer) ? 0 : EIO;
+}
+
+int bootsessionuuid_randomize(char uuidOut[BOOTSESSIONUUID_STRING_SIZE])
+{
+    uuid_t generated;
+    char generatedString[BOOTSESSIONUUID_STRING_SIZE] = {0};
+    uuid_generate_random(generated);
+    uuid_unparse_upper(generated, generatedString);
+
+    int r = bootsessionuuid_set(generatedString);
+    if (r == 0 && uuidOut) memcpy(uuidOut, generatedString, sizeof(generatedString));
+    return r;
+}
 
 void oid_remove(struct sysctl_oid_list* oid_parent, struct sysctl_oid* oid)
 {
@@ -976,4 +1069,3 @@ int wait_for_exit(pid_t pid)
         }
     }
 }
-

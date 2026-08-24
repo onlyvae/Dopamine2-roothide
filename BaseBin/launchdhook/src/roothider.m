@@ -111,6 +111,17 @@ void roothide_launchd_postinit(bool firstLoad)
 		{
 			hideDeveloperMode();
 		}
+		else
+		{
+			char spoofedBootSessionUUID[BOOTSESSIONUUID_STRING_SIZE] = {0};
+			int r = bootsessionuuid_randomize(spoofedBootSessionUUID);
+			if (r != 0) {
+				JBLogError("bootsessionuuid_randomize failed: %d", r);
+			}
+			else {
+				JBLogDebug("spoofed kern.bootsessionuuid: %s", spoofedBootSessionUUID);
+			}
+		}
 		
 #ifdef __arm64e__
 		if (!__builtin_available(iOS 16.0, *))
@@ -442,4 +453,3 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 	return __posix_spawn_hook(pidp, path, desc, argv, envp);
 }
-
