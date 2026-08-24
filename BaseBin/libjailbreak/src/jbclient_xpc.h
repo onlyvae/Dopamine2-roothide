@@ -41,6 +41,8 @@ int jbclient_root_trustcache_info(xpc_object_t *infoOut);
 int jbclient_root_trustcache_clear(void);
 int jbclient_root_bootsessionuuid_get(char **uuidOut);
 int jbclient_root_bootsessionuuid_set(const char *uuid);
+int jbclient_root_boottime_get(uint64_t *secondsOut, uint32_t *microsecondsOut);
+int jbclient_root_boottime_set(uint64_t seconds, uint32_t microseconds);
 int jbclient_boomerang_done(void);
 
 

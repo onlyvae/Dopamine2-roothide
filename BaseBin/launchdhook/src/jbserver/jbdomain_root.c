@@ -118,6 +118,24 @@ static int root_bootsessionuuid_set(const char *uuid)
 	return bootsessionuuid_set(uuid);
 }
 
+static int root_boottime_get(uint64_t *secondsOut, uint64_t *microsecondsOut)
+{
+	uint64_t seconds = 0;
+	uint32_t microseconds = 0;
+	int r = boottime_get(&seconds, &microseconds);
+	if (r != 0) return r;
+
+	if (secondsOut) *secondsOut = seconds;
+	if (microsecondsOut) *microsecondsOut = microseconds;
+	return 0;
+}
+
+static int root_boottime_set(uint64_t seconds, uint64_t microseconds)
+{
+	if (microseconds > UINT32_MAX) return EINVAL;
+	return boottime_set(seconds, (uint32_t)microseconds);
+}
+
 struct jbserver_domain gRootDomain = {
 	.permissionHandler = root_domain_allowed,
 	.actions = {
@@ -205,6 +223,24 @@ struct jbserver_domain gRootDomain = {
 			.handler = root_bootsessionuuid_set,
 			.args = (jbserver_arg[]){
 				{ .name = "uuid", .type = JBS_TYPE_STRING, .out = false },
+				{ 0 },
+			},
+		},
+		// JBS_ROOT_BOOTTIME_GET
+		{
+			.handler = root_boottime_get,
+			.args = (jbserver_arg[]){
+				{ .name = "seconds", .type = JBS_TYPE_UINT64, .out = true },
+				{ .name = "microseconds", .type = JBS_TYPE_UINT64, .out = true },
+				{ 0 },
+			},
+		},
+		// JBS_ROOT_BOOTTIME_SET
+		{
+			.handler = root_boottime_set,
+			.args = (jbserver_arg[]){
+				{ .name = "seconds", .type = JBS_TYPE_UINT64, .out = false },
+				{ .name = "microseconds", .type = JBS_TYPE_UINT64, .out = false },
 				{ 0 },
 			},
 		},

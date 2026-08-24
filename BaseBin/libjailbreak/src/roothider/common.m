@@ -537,6 +537,65 @@ int bootsessionuuid_randomize(char uuidOut[BOOTSESSIONUUID_STRING_SIZE])
     return r;
 }
 
+struct boottime_storage {
+    uint32_t microseconds;
+    uint32_t padding;
+    uint64_t seconds;
+};
+
+int boottime_get(uint64_t *secondsOut, uint32_t *microsecondsOut)
+{
+    uint64_t secondsAddress = ksymbol(boottime_sec);
+    uint64_t microsecondsAddress = ksymbol(boottime_usec);
+    if (!secondsAddress || !microsecondsAddress ||
+        microsecondsAddress + offsetof(struct boottime_storage, seconds) != secondsAddress) {
+        return ENOENT;
+    }
+
+    struct boottime_storage value = {0};
+    if (kreadbuf(microsecondsAddress, &value, sizeof(value)) != 0) return EIO;
+    if (value.microseconds >= 1000000 || value.seconds == 0) return EPROTO;
+
+    if (secondsOut) *secondsOut = value.seconds;
+    if (microsecondsOut) *microsecondsOut = value.microseconds;
+    return 0;
+}
+
+int boottime_set(uint64_t seconds, uint32_t microseconds)
+{
+    if (seconds == 0 || microseconds >= 1000000) return EINVAL;
+
+    uint64_t secondsAddress = ksymbol(boottime_sec);
+    uint64_t microsecondsAddress = ksymbol(boottime_usec);
+    if (!secondsAddress || !microsecondsAddress ||
+        microsecondsAddress + offsetof(struct boottime_storage, seconds) != secondsAddress) {
+        return ENOENT;
+    }
+
+    struct boottime_storage original = {0};
+    if (kreadbuf(microsecondsAddress, &original, sizeof(original)) != 0) return EIO;
+    if (original.microseconds >= 1000000 || original.seconds == 0) return EPROTO;
+
+    // The iOS 15 kernel lays these writable globals out as usec, padding, sec.
+    // Keep the padding intact and update the complete snapshot in one primitive
+    // instead of touching the sysctl OID or its authenticated handler pointer.
+    struct boottime_storage replacement = original;
+    replacement.microseconds = microseconds;
+    replacement.seconds = seconds;
+    if (kwritebuf(microsecondsAddress, &replacement, sizeof(replacement)) != 0) return EIO;
+
+    struct boottime_storage installed = {0};
+    if (kreadbuf(microsecondsAddress, &installed, sizeof(installed)) == 0 &&
+        installed.microseconds == replacement.microseconds &&
+        installed.seconds == replacement.seconds) {
+        return 0;
+    }
+
+    // Best-effort rollback if the write completed only partially.
+    kwritebuf(microsecondsAddress, &original, sizeof(original));
+    return EIO;
+}
+
 void oid_remove(struct sysctl_oid_list* oid_parent, struct sysctl_oid* oid)
 {
     JBLogDebug("oid_remove: %p %p \n", oid_parent, oid);

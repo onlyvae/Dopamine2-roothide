@@ -5,6 +5,7 @@
 
 #import <Foundation/Foundation.h>
 #import <CoreServices/LSApplicationProxy.h>
+#include <errno.h>
 #include <uuid/uuid.h>
 
 int reboot3(uint64_t flags, ...);
@@ -22,6 +23,8 @@ Available commands:\n\
 	bootsessionuuid get\t\tPrint the current spoofed kern.bootsessionuuid\n\
 	bootsessionuuid set <uuid>\tReplace kern.bootsessionuuid without rejailbreaking\n\
 	bootsessionuuid random\t\tGenerate and install a new kern.bootsessionuuid\n\
+	boottime get\t\t\tPrint kern.boottime as seconds and microseconds\n\
+	boottime set <sec> [usec]\tReplace kern.boottime without rejailbreaking\n\
 	update <tipa/basebin> <path>\tInitiates a jailbreak update either based on a TIPA or based on a basebin.tar file, TIPA installation depends on TrollStore, afterwards it triggers a userspace reboot\n");
 }
 
@@ -194,6 +197,64 @@ int main(int argc, char* argv[])
 		int r = jbclient_root_bootsessionuuid_set(uuid);
 		if (r == 0) printf("%s\n", uuid);
 		else printf("Failed to set kern.bootsessionuuid: %d\n", r);
+		return r;
+	}
+	else if (!strcmp(cmd, "boottime")) {
+		if (getuid() != 0) {
+			printf("ERROR: boottime command requires root.\n");
+			return 3;
+		}
+		if (argc < 3) {
+			print_usage();
+			return 2;
+		}
+
+		const char *subcommand = argv[2];
+		if (!strcmp(subcommand, "get")) {
+			uint64_t seconds = 0;
+			uint32_t microseconds = 0;
+			int r = jbclient_root_boottime_get(&seconds, &microseconds);
+			if (r == 0) printf("%llu %u\n", (unsigned long long)seconds, microseconds);
+			else printf("Failed to read kern.boottime: %d\n", r);
+			return r;
+		}
+
+		if (strcmp(subcommand, "set") != 0 || argc < 4 || argc > 5) {
+			print_usage();
+			return 2;
+		}
+
+		char *end = NULL;
+		errno = 0;
+		unsigned long long parsedSeconds = strtoull(argv[3], &end, 10);
+		if (errno != 0 || !end || *end != '\0' || parsedSeconds == 0) {
+			printf("ERROR: seconds must be a positive integer.\n");
+			return 2;
+		}
+
+		uint32_t microseconds = 0;
+		if (argc == 5) {
+			end = NULL;
+			errno = 0;
+			unsigned long parsedMicroseconds = strtoul(argv[4], &end, 10);
+			if (errno != 0 || !end || *end != '\0' || parsedMicroseconds >= 1000000) {
+				printf("ERROR: microseconds must be between 0 and 999999.\n");
+				return 2;
+			}
+			microseconds = (uint32_t)parsedMicroseconds;
+		}
+		else {
+			uint64_t ignoredSeconds = 0;
+			int r = jbclient_root_boottime_get(&ignoredSeconds, &microseconds);
+			if (r != 0) {
+				printf("Failed to preserve kern.boottime microseconds: %d\n", r);
+				return r;
+			}
+		}
+
+		int r = jbclient_root_boottime_set((uint64_t)parsedSeconds, microseconds);
+		if (r == 0) printf("%llu %u\n", parsedSeconds, microseconds);
+		else printf("Failed to set kern.boottime: %d\n", r);
 		return r;
 	}
 	else if (!strcmp(cmd, "update")) {

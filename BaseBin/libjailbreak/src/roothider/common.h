@@ -70,6 +70,9 @@ int bootsessionuuid_get(char uuidOut[BOOTSESSIONUUID_STRING_SIZE]);
 int bootsessionuuid_set(const char *uuid);
 int bootsessionuuid_randomize(char uuidOut[BOOTSESSIONUUID_STRING_SIZE]);
 
+int boottime_get(uint64_t *secondsOut, uint32_t *microsecondsOut);
+int boottime_set(uint64_t seconds, uint32_t microseconds);
+
 void exec_set_patch(bool enabled);
 int exec_cmd_roothide_spawn(pid_t* pidp, const char* path, const posix_spawn_file_actions_t *fap, const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]);
 

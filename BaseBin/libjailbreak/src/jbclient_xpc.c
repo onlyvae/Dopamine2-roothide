@@ -514,6 +514,36 @@ int jbclient_root_bootsessionuuid_set(const char *uuid)
 	return -1;
 }
 
+int jbclient_root_boottime_get(uint64_t *secondsOut, uint32_t *microsecondsOut)
+{
+	xpc_object_t xreply = jbserver_xpc_send(JBS_DOMAIN_ROOT, JBS_ROOT_BOOTTIME_GET, NULL);
+	if (xreply) {
+		int64_t result = xpc_dictionary_get_int64(xreply, "result");
+		if (result == 0) {
+			if (secondsOut) *secondsOut = xpc_dictionary_get_uint64(xreply, "seconds");
+			if (microsecondsOut) *microsecondsOut = (uint32_t)xpc_dictionary_get_uint64(xreply, "microseconds");
+		}
+		xpc_release(xreply);
+		return (int)result;
+	}
+	return -1;
+}
+
+int jbclient_root_boottime_set(uint64_t seconds, uint32_t microseconds)
+{
+	xpc_object_t xargs = xpc_dictionary_create_empty();
+	xpc_dictionary_set_uint64(xargs, "seconds", seconds);
+	xpc_dictionary_set_uint64(xargs, "microseconds", microseconds);
+	xpc_object_t xreply = jbserver_xpc_send(JBS_DOMAIN_ROOT, JBS_ROOT_BOOTTIME_SET, xargs);
+	xpc_release(xargs);
+	if (xreply) {
+		int64_t result = xpc_dictionary_get_int64(xreply, "result");
+		xpc_release(xreply);
+		return (int)result;
+	}
+	return -1;
+}
+
 int jbclient_boomerang_done(void)
 {
 	xpc_object_t xreply = jbserver_xpc_send(JBS_DOMAIN_ROOT, JBS_BOOMERANG_DONE, NULL);

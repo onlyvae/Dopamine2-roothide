@@ -91,6 +91,8 @@ struct system_info {
 		uint64_t launch_env_logging;
 		uint64_t developer_mode_status;
 		uint64_t bootsessionuuid;
+		uint64_t boottime_sec;
+		uint64_t boottime_usec;
 /************** roothide specfic ***********/
 	} kernelSymbol;
 
@@ -283,6 +285,8 @@ extern struct system_info gSystemInfo;
 	iterator(ctx, kernelSymbol.launch_env_logging); \
 	iterator(ctx, kernelSymbol.developer_mode_status); \
 	iterator(ctx, kernelSymbol.bootsessionuuid); \
+	iterator(ctx, kernelSymbol.boottime_sec); \
+	iterator(ctx, kernelSymbol.boottime_usec); \
 	\
 	\
 	iterator(ctx, kernelSymbol.perfmon_dev_open); \
