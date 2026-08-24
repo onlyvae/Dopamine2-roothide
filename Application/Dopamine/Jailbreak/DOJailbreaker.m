@@ -30,6 +30,7 @@
 #import <libjailbreak/jbclient_mach.h>
 #import <libjailbreak/kcall_arm64.h>
 #import <libjailbreak/basebin_gen.h>
+#import <libjailbreak/roothider/common.h>
 #import <CoreServices/LSApplicationProxy.h>
 #import <sys/utsname.h>
 #import "spawn.h"
@@ -610,6 +611,23 @@ void *boomerang_server(struct boomerang_info *info)
     [[DOUIManager sharedInstance] sendLog:DOLocalizedString(@"Initializing Environment") debug:NO];
     *errOut = [self injectLaunchdHook];
     if (*errOut) return;
+
+    // Do not allocate through IOSurface from launchd's injection constructor.
+    // At that point launchd has not returned to its normal event loop yet and
+    // IOSurface_kalloc can wait forever, leaving injectLaunchdHook blocked.
+    if (@available(iOS 16.0, *)) {}
+    else {
+        char spoofedBootSessionUUID[BOOTSESSIONUUID_STRING_SIZE] = {0};
+        int r = bootsessionuuid_randomize(spoofedBootSessionUUID);
+        if (r == 0) {
+            [[DOUIManager sharedInstance] sendLog:[NSString stringWithFormat:@"Spoofed kern.bootsessionuuid: %s", spoofedBootSessionUUID] debug:YES];
+        }
+        else {
+            // UUID spoofing is optional and must never prevent the jailbreak
+            // environment from completing initialization.
+            [[DOUIManager sharedInstance] sendLog:[NSString stringWithFormat:@"Failed to spoof kern.bootsessionuuid: %d", r] debug:NO];
+        }
+    }
     
 /*
     // Now that we can, protect important system files by bind mounting on top of them
