@@ -1,5 +1,6 @@
 #include "jbserver_global.h"
 #include "jbsettings.h"
+#include "sysctl_spoof.h"
 #include <libjailbreak/info.h>
 #include <sandbox.h>
 #include <libproc.h>
@@ -13,6 +14,7 @@
 #include <libjailbreak/codesign.h>
 
 #include <signal.h>
+#include <errno.h>
 #include <libjailbreak/roothider.h>
 
 /*
@@ -96,6 +98,30 @@ static int systemwide_get_boot_uuid(char **bootUUIDOut)
 {
 	const char *launchdUUID = getenv("LAUNCHD_UUID");
 	*bootUUIDOut = launchdUUID ? strdup(launchdUUID) : NULL;
+	return 0;
+}
+
+static int systemwide_sysctl_originals_get(audit_token_t *processToken, char **uuidOut, uint64_t *secondsOut,
+	uint64_t *microsecondsOut)
+{
+	if (!processToken || !uuidOut || !secondsOut || !microsecondsOut) return EINVAL;
+
+	char processPath[PROC_PIDPATHINFO_MAXSIZE] = {0};
+	if (proc_pidpath(audit_token_to_pid(*processToken), processPath, sizeof(processPath)) <= 0 ||
+		isRemovableBundlePath(processPath)) {
+		return EPERM;
+	}
+
+	char uuid[BOOTSESSIONUUID_STRING_SIZE] = {0};
+	uint64_t seconds = 0;
+	uint32_t microseconds = 0;
+	int r = sysctl_spoof_get_originals(uuid, &seconds, &microseconds);
+	if (r != 0) return r;
+
+	*uuidOut = strdup(uuid);
+	if (!*uuidOut) return ENOMEM;
+	*secondsOut = seconds;
+	*microsecondsOut = microseconds;
 	return 0;
 }
 
@@ -553,6 +579,17 @@ struct jbserver_domain gSystemwideDomain = {
 			.args = (jbserver_arg[]){
 				{ .name = "key", .type = JBS_TYPE_STRING, .out = false },
 				{ .name = "value", .type = JBS_TYPE_XPC_GENERIC, .out = true },
+			},
+		},
+		// JBS_SYSTEMWIDE_SYSCTL_ORIGINALS_GET
+		{
+			.handler = systemwide_sysctl_originals_get,
+			.args = (jbserver_arg[]){
+				{ .name = "caller-token", .type = JBS_TYPE_CALLER_TOKEN, .out = false },
+				{ .name = "bootsessionuuid", .type = JBS_TYPE_STRING, .out = true },
+				{ .name = "boottime-seconds", .type = JBS_TYPE_UINT64, .out = true },
+				{ .name = "boottime-microseconds", .type = JBS_TYPE_UINT64, .out = true },
+				{ 0 },
 			},
 		},
 		{ 0 },

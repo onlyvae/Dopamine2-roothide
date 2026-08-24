@@ -9,6 +9,7 @@
 
 #include "../systemhook/src/common.h"
 #include "../systemhook/src/envbuf.h"
+#include "jbserver/sysctl_spoof.h"
 
 const char* HOOK_DYLIB_PATH = NULL;
 
@@ -100,6 +101,19 @@ void roothide_launchd_postinit(bool firstLoad)
 	JBLogDebug("roothide_launchd_postinit: firstLoad=%d", firstLoad);
 
 	launchdhookFirstLoad = firstLoad;
+	// The persistent jailbreak root is not finalized during the first launchd
+	// injection. Capture after the userspace reboot, before systemhook starts.
+	if (!firstLoad) {
+		if (__builtin_available(iOS 16.0, *)) {
+			// The kernel identity spoof is currently supported on iOS 15 only.
+		}
+		else {
+			if (sysctl_spoof_init() != 0) {
+				launchd_panic("failed to capture original sysctl identity values");
+				return;
+			}
+		}
+	}
 
 	exec_set_patch(true);
 

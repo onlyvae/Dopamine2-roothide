@@ -171,6 +171,25 @@ int jbclient_process_checkin(char **rootPathOut, char **bootUUIDOut, char **sand
 	return -1;
 }
 
+int jbclient_systemwide_sysctl_originals_get(char **uuidOut, uint64_t *secondsOut, uint32_t *microsecondsOut)
+{
+	if (uuidOut) *uuidOut = NULL;
+	xpc_object_t xreply = jbserver_xpc_send(JBS_DOMAIN_SYSTEMWIDE, JBS_SYSTEMWIDE_SYSCTL_ORIGINALS_GET, NULL);
+	if (xreply) {
+		int64_t result = xpc_dictionary_get_int64(xreply, "result");
+		if (result == 0) {
+			const char *uuid = xpc_dictionary_get_string(xreply, "bootsessionuuid");
+			if (uuidOut && uuid) *uuidOut = strdup(uuid);
+			if (secondsOut) *secondsOut = xpc_dictionary_get_uint64(xreply, "boottime-seconds");
+			if (microsecondsOut) *microsecondsOut =
+				(uint32_t)xpc_dictionary_get_uint64(xreply, "boottime-microseconds");
+		}
+		xpc_release(xreply);
+		return (int)result;
+	}
+	return -1;
+}
+
 int jbclient_fork_fix(uint64_t childPid)
 {
 	xpc_object_t xargs = xpc_dictionary_create_empty();

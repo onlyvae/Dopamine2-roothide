@@ -1,4 +1,5 @@
 #include "jbserver_global.h"
+#include "sysctl_spoof.h"
 #include <errno.h>
 #include <libjailbreak/jbserver_boomerang.h>
 #include <libjailbreak/trustcache.h>
@@ -115,7 +116,7 @@ static int root_bootsessionuuid_get(char **uuidOut)
 
 static int root_bootsessionuuid_set(const char *uuid)
 {
-	return bootsessionuuid_set(uuid);
+	return sysctl_spoof_bootsessionuuid_set(uuid);
 }
 
 static int root_boottime_get(uint64_t *secondsOut, uint64_t *microsecondsOut)
@@ -133,7 +134,7 @@ static int root_boottime_get(uint64_t *secondsOut, uint64_t *microsecondsOut)
 static int root_boottime_set(uint64_t seconds, uint64_t microseconds)
 {
 	if (microseconds > UINT32_MAX) return EINVAL;
-	return boottime_set(seconds, (uint32_t)microseconds);
+	return sysctl_spoof_boottime_set(seconds, (uint32_t)microseconds);
 }
 
 struct jbserver_domain gRootDomain = {

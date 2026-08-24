@@ -493,12 +493,22 @@ void roothide_init_with_checkin(const char* rootdir)
 
 void roothide_init_with_executable(const char* executable)
 {
-	if (__builtin_available(iOS 16.0, *))
-	{
-		if(!isRemovableBundlePath(executable)) {
-			litehook_hook_function(__sysctl, __sysctl_hook);
-			litehook_hook_function(__sysctlbyname, __sysctlbyname_hook);
+	bool isJBCTL = executable && string_has_suffix(executable, "/jbctl");
+	if (!isRemovableBundlePath(executable) && !isJBCTL) {
+		char *originalBootsessionUUID = NULL;
+		uint64_t originalBoottimeSeconds = 0;
+		uint32_t originalBoottimeMicroseconds = 0;
+		if (jbclient_systemwide_sysctl_originals_get(&originalBootsessionUUID,
+			&originalBoottimeSeconds, &originalBoottimeMicroseconds) == 0) {
+			sysctl_identity_restore_configure(originalBootsessionUUID,
+				originalBoottimeSeconds, originalBoottimeMicroseconds);
 		}
+		free(originalBootsessionUUID);
+
+		// iOS 15 does not expose developer_mode_status, but these hooks are also
+		// needed there to restore the original identity values for system tools.
+		litehook_hook_function(__sysctl, __sysctl_hook);
+		litehook_hook_function(__sysctlbyname, __sysctlbyname_hook);
 	}
 
 #ifndef __arm64e__
@@ -522,4 +532,3 @@ void roothide_init_with_executable(const char* executable)
 
 	dlopen(JBROOT_PATH("/usr/lib/roothidepatch.dylib"), RTLD_NOW); //require jit
 }
-
