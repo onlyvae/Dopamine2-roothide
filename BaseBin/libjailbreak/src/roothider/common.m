@@ -510,7 +510,7 @@ int bootsessionuuid_set(const char *uuid)
     int r = bootsessionuuid_get_oid(&oid);
     if (r != 0) return r;
 
-    // oid_arg1 itself lives in __DATA_CONST on iOS 15. Replacing that pointer
+    // oid_arg1 itself lives in __DATA_CONST on iOS 15 and 16. Replacing that pointer
     // through the physical write primitive spins forever and watchdog-panics
     // launchd. The backing UUID buffer is writable, so update it in place and
     // leave all sysctl metadata untouched. UUID separators and the trailing
@@ -576,7 +576,7 @@ int boottime_set(uint64_t seconds, uint32_t microseconds)
     if (kreadbuf(microsecondsAddress, &original, sizeof(original)) != 0) return EIO;
     if (original.microseconds >= 1000000 || original.seconds == 0) return EPROTO;
 
-    // The iOS 15 kernel lays these writable globals out as usec, padding, sec.
+    // The iOS 15 and 16 kernels lay these writable globals out as usec, padding, sec.
     // Keep the padding intact and update the complete snapshot in one primitive
     // instead of touching the sysctl OID or its authenticated handler pointer.
     struct boottime_storage replacement = original;
