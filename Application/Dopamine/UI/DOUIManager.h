@@ -17,9 +17,13 @@ NS_ASSUME_NONNULL_BEGIN
     DOPreferenceManager *_preferenceManager;
     NSDictionary *_fallbackLocalizations;
     NSLock *_logLock;
+    NSLock *_logFileLock;
+    int _logFileDescriptor;
+    BOOL _logCaptureStarted;
 }
 
 @property (nonatomic, readonly) NSString *bootlogoPath;
+@property (nonatomic, readonly) NSString *logFilePath;
 @property (nonatomic, retain) NSObject<DOLogViewProtocol> *logView;
 @property (atomic, retain) NSMutableArray<NSString*> *logRecord;
 

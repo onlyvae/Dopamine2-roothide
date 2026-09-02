@@ -10,7 +10,10 @@
 #import "DOThemeManager.h"
 #import "DOTheme.h"
 #import "NSString+Version.h"
+#import <errno.h>
+#import <fcntl.h>
 #import <pthread.h>
+#import <unistd.h>
 
 @implementation DOUIManager
 
@@ -28,11 +31,83 @@
 {
     if (self = [super init]){
         _bootlogoPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/bootlogo.png"];
+        _logFilePath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/dopamine-latest.log"];
         _preferenceManager = [DOPreferenceManager sharedManager];
         _logRecord = [NSMutableArray new];
         _logLock = [NSLock new];
+        _logFileLock = [NSLock new];
+        _logFileDescriptor = -1;
+        _logCaptureStarted = NO;
     }
     return self;
+}
+
+- (void)resetPersistentLog
+{
+    [_logFileLock lock];
+
+    if (_logFileDescriptor >= 0) {
+        close(_logFileDescriptor);
+        _logFileDescriptor = -1;
+    }
+
+    _logFileDescriptor = open(self.logFilePath.fileSystemRepresentation,
+                              O_WRONLY | O_CREAT | O_TRUNC | O_APPEND,
+                              S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    if (_logFileDescriptor >= 0) {
+        NSString *header = [NSString stringWithFormat:
+                            @"Dopamine %@ persistent log\nStarted: %@\n\n",
+                            [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"unknown",
+                            [NSDate date]];
+        NSData *headerData = [header dataUsingEncoding:NSUTF8StringEncoding];
+        const uint8_t *bytes = headerData.bytes;
+        NSUInteger remaining = headerData.length;
+        while (remaining > 0) {
+            ssize_t written = write(_logFileDescriptor, bytes, remaining);
+            if (written < 0 && errno == EINTR) {
+                continue;
+            }
+            if (written <= 0) {
+                break;
+            }
+            bytes += written;
+            remaining -= written;
+        }
+    }
+
+    [_logFileLock unlock];
+}
+
+- (void)appendLogToFile:(NSString *)log
+{
+    if (!log) return;
+
+    NSData *logData = [log dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:YES];
+    if (!logData) return;
+
+    [_logFileLock lock];
+    if (_logFileDescriptor >= 0) {
+        const uint8_t *bytes = logData.bytes;
+        NSUInteger remaining = logData.length;
+        while (remaining > 0) {
+            ssize_t written = write(_logFileDescriptor, bytes, remaining);
+            if (written < 0 && errno == EINTR) {
+                continue;
+            }
+            if (written <= 0) {
+                break;
+            }
+            bytes += written;
+            remaining -= written;
+        }
+
+        if (![log hasSuffix:@"\n"]) {
+            const char newline = '\n';
+            write(_logFileDescriptor, &newline, sizeof(newline));
+        }
+    }
+    [_logFileLock unlock];
 }
 
 - (BOOL)isUpdateAvailable
@@ -207,7 +282,12 @@
 
 - (void)sendLog:(NSString*)log debug:(BOOL)debug update:(BOOL)update
 {
-    if (!self.logView || !log)
+    if (!log)
+        return;
+
+    [self appendLogToFile:log];
+
+    if (!self.logView)
         return;
 
     [_logLock lock];
@@ -239,11 +319,16 @@
 
 - (void)shareLogRecordFromView:(UIView *)sourceView
 {
-    if (self.logRecord.count == 0)
-        return;
+    id activityItem = nil;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:self.logFilePath]) {
+        activityItem = [NSURL fileURLWithPath:self.logFilePath];
+    }
+    else if (self.logRecord.count > 0) {
+        activityItem = [self.logRecord componentsJoinedByString:@"\n"];
+    }
+    if (!activityItem) return;
 
-    NSString *log = [self.logRecord componentsJoinedByString:@"\n"];
-    UIActivityViewController *activityViewController = [[UIActivityViewController alloc] initWithActivityItems:@[log] applicationActivities:nil];
+    UIActivityViewController *activityViewController = [[UIActivityViewController alloc] initWithActivityItems:@[activityItem] applicationActivities:nil];
     activityViewController.popoverPresentationController.sourceView = sourceView;
     activityViewController.popoverPresentationController.sourceRect = sourceView.bounds;
     [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:activityViewController animated:YES completion:nil];
@@ -298,6 +383,16 @@
 
 - (void)startLogCapture
 {
+    [self resetPersistentLog];
+
+    // Keep printf output out of stdio buffers so assertion details reach disk
+    // before libkfd deliberately terminates the process.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
+    if (_logCaptureStarted) return;
+    _logCaptureStarted = YES;
+
     [self observeFileDescriptor:STDOUT_FILENO withCallback:^(char *line) {
         NSString *str = [NSString stringWithUTF8String:line];
         [self sendLog:str debug:YES];
